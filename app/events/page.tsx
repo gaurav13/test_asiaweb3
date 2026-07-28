@@ -36,7 +36,7 @@ export default async function EventsPage() {
 
       <section className="border-b border-gold/20 bg-navy">
         <div className="mx-auto max-w-[1280px] px-5 py-14 lg:px-10 lg:py-20">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">Events</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">Events • {events.length} Total</p>
           <h1 className="mt-3 max-w-3xl text-balance font-serif text-4xl font-bold leading-tight text-white lg:text-5xl">
             Upcoming Events &amp; Programs
           </h1>
