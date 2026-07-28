@@ -25,7 +25,7 @@ import {
 import { MembershipContentPanel } from "./membership-content-panel"
 import type { MembershipContent } from "@/lib/membership-content"
 import { PeoplePanel } from "./people-panel"
-import type { Person } from "@/app/actions/people"
+import type { PersonWithOrg } from "@/app/actions/people"
 import { OrganizationsPanel } from "./organizations-panel"
 import { ApplicationsPanel } from "./applications-panel"
 import type { MemberApplication } from "@/lib/db/schema"
@@ -546,7 +546,7 @@ export function AdminDashboard({
   members: Member[]
   membershipPlans: MembershipPlan[]
   membershipContent: MembershipContent
-  people: Person[]
+  people: PersonWithOrg[]
   peopleCounts: {
     counts: { total: number; published: number; draft: number; homepage: number }
     byRole: Record<string, number>
@@ -983,7 +983,12 @@ export function AdminDashboard({
           </TabsContent>
 
           <TabsContent value="people" className="mt-6">
-            <PeoplePanel people={people} counts={peopleCounts.counts} byRole={peopleCounts.byRole} />
+            <PeoplePanel
+              people={people}
+              counts={peopleCounts.counts}
+              byRole={peopleCounts.byRole}
+              organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+            />
           </TabsContent>
 
           <TabsContent value="organizations" className="mt-6">

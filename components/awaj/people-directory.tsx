@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { Search, ExternalLink, CalendarDays, Layers } from "lucide-react"
+import { Search, ExternalLink, CalendarDays, Layers, Building2, LayoutGrid, Rows3 } from "lucide-react"
 import type { DirectoryPerson } from "@/app/actions/people"
 import { newestFirstThenShuffle, recencyMs } from "@/lib/shuffle"
 
@@ -12,6 +12,7 @@ export function PeopleDirectory({ people }: { people: DirectoryPerson[] }) {
   const [query, setQuery] = useState("")
   const [activeRole, setActiveRole] = useState("All")
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [groupByOrg, setGroupByOrg] = useState(false)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const roles = useMemo(() => {
@@ -47,6 +48,24 @@ export function PeopleDirectory({ people }: { people: DirectoryPerson[] }) {
   const visible = filtered.slice(0, visibleCount)
   const hasMore = visibleCount < filtered.length
 
+  // Grouped view: members bucketed under their linked organisation (unlinked people last).
+  const grouped = useMemo(() => {
+    const map = new Map<string, { name: string | null; people: DirectoryPerson[] }>()
+    for (const p of filtered) {
+      const key = p.organizationId != null ? `org-${p.organizationId}` : "none"
+      if (!map.has(key)) map.set(key, { name: p.organizationName, people: [] })
+      map.get(key)!.people.push(p)
+    }
+    const groups = Array.from(map.entries()).map(([key, v]) => ({ key, ...v }))
+    // Named organisations first (alphabetical), the "no organisation" bucket last.
+    groups.sort((a, b) => {
+      if (a.key === "none") return 1
+      if (b.key === "none") return -1
+      return (a.name ?? "").localeCompare(b.name ?? "")
+    })
+    return groups
+  }, [filtered])
+
   // Infinite scroll: load the next page when the sentinel enters the viewport.
   useEffect(() => {
     if (!hasMore) return
@@ -78,9 +97,35 @@ export function PeopleDirectory({ people }: { people: DirectoryPerson[] }) {
             aria-label="Search people"
           />
         </div>
-        <p className="text-sm text-navy-text/55">
-          {filtered.length} {filtered.length === 1 ? "person" : "people"}
-        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-full border border-gold/30 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => setGroupByOrg(false)}
+              aria-pressed={!groupByOrg}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                !groupByOrg ? "bg-awaj-red text-white" : "text-navy-text/60 hover:text-navy-text"
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              All people
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupByOrg(true)}
+              aria-pressed={groupByOrg}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                groupByOrg ? "bg-awaj-red text-white" : "text-navy-text/60 hover:text-navy-text"
+              }`}
+            >
+              <Rows3 className="h-3.5 w-3.5" />
+              By organisation
+            </button>
+          </div>
+          <p className="text-sm text-navy-text/55">
+            {filtered.length} {filtered.length === 1 ? "person" : "people"}
+          </p>
+        </div>
       </div>
 
       {/* Role filters */}
@@ -106,6 +151,31 @@ export function PeopleDirectory({ people }: { people: DirectoryPerson[] }) {
         <div className="mt-10 rounded-2xl border border-gold/20 bg-white p-12 text-center">
           <h2 className="font-serif text-xl font-bold text-navy-text">No people found</h2>
           <p className="mt-2 text-sm text-navy-text/60">Try a different search or filter.</p>
+        </div>
+      ) : groupByOrg ? (
+        <div className="mt-8 flex flex-col gap-10">
+          {grouped.map((group) => (
+            <section key={group.key}>
+              <div className="flex items-center gap-2 border-b border-gold/20 pb-2">
+                {group.key === "none" ? (
+                  <h2 className="font-serif text-lg font-bold text-navy-text/70">Independent &amp; unaffiliated</h2>
+                ) : (
+                  <h2 className="inline-flex items-center gap-2 font-serif text-lg font-bold text-navy-text">
+                    <Building2 className="h-4 w-4 text-gold" />
+                    {group.name}
+                  </h2>
+                )}
+                <span className="rounded-full bg-beige px-2 py-0.5 text-xs font-medium text-navy-text/60">
+                  {group.people.length}
+                </span>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                {group.people.map((person) => (
+                  <PersonCard key={person.id} person={person} />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       ) : (
         <>
@@ -163,6 +233,13 @@ function PersonCard({ person }: { person: DirectoryPerson }) {
         ) : person.companyName ? (
           <p className="mt-1 text-xs font-semibold text-gold">{person.companyName}</p>
         ) : null}
+
+        {person.organizationName && (
+          <p className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-[10px] font-semibold text-gold">
+            <Building2 className="h-3 w-3" />
+            {person.organizationName}
+          </p>
+        )}
 
         {roles.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">

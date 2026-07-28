@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { withDb } from "@/lib/db/with-db"
-import { people, eventsPeople, programsPeople, events, programs, teamMembers } from "@/lib/db/schema"
+import { people, eventsPeople, programsPeople, events, programs, teamMembers, organizations } from "@/lib/db/schema"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getUserId } from "@/lib/admin-helpers"
@@ -10,6 +10,9 @@ import { findOrCreatePersonByName, renumberPeopleByPriority, syncEventSpeakerPeo
 import { resolveOptionalImage, resolvePersonRecord } from "@/lib/images"
 
 export type Person = typeof people.$inferSelect
+
+/** A person row plus the (denormalised) name of the organization they belong to, for admin lists. */
+export type PersonWithOrg = Person & { organizationName: string | null }
 
 export type PersonInput = {
   fullName: string
@@ -21,6 +24,7 @@ export type PersonInput = {
   email?: string
   country?: string
   bio?: string
+  organizationId?: number | null
   roleTypes?: string[]
   tags?: string[]
   featured?: boolean
@@ -75,6 +79,8 @@ export type DirectoryPerson = {
   roleTypes: string[]
   featured: boolean
   sortOrder: number
+  organizationId: number | null
+  organizationName: string | null
   createdAt: string
   updatedAt: string
   events: PersonConnection[]
@@ -94,14 +100,15 @@ function pushUnique(list: PersonConnection[], conn: PersonConnection) {
 export async function getPeopleDirectory(): Promise<DirectoryPerson[]> {
   return withDb(async () => {
     const peopleRows = await db
-      .select()
+      .select({ person: people, organizationName: organizations.name })
       .from(people)
+      .leftJoin(organizations, eq(organizations.id, people.organizationId))
       .where(eq(people.status, "published"))
       .orderBy(asc(people.sortOrder), asc(people.id))
     if (peopleRows.length === 0) return []
 
     const byPersonId = new Map<number, DirectoryPerson>()
-    const result: DirectoryPerson[] = peopleRows.map((p) => {
+    const result: DirectoryPerson[] = peopleRows.map(({ person: p, organizationName }) => {
       const entry: DirectoryPerson = {
         id: `person-${p.id}`,
         fullName: p.fullName,
@@ -115,6 +122,8 @@ export async function getPeopleDirectory(): Promise<DirectoryPerson[]> {
         roleTypes: [...(p.roleTypes ?? [])],
         featured: p.featured,
         sortOrder: p.sortOrder,
+        organizationId: p.organizationId ?? null,
+        organizationName: organizationName ?? null,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
         events: [],
@@ -124,7 +133,7 @@ export async function getPeopleDirectory(): Promise<DirectoryPerson[]> {
       return entry
     })
 
-    const ids = peopleRows.map((r) => r.id)
+    const ids = peopleRows.map((r) => r.person.id)
     const [eventLinks, programLinks] = await Promise.all([
       db
         .select({ personId: eventsPeople.personId, id: events.id, title: events.title, slug: events.slug })
@@ -260,9 +269,23 @@ export async function reorderPerson(id: number, direction: "up" | "down") {
 
 // ---- Admin reads ----
 
-export async function getMyPeople(): Promise<Person[]> {
+export async function getMyPeople(): Promise<PersonWithOrg[]> {
   await getUserId()
-  return db.select().from(people).orderBy(asc(people.sortOrder), asc(people.id))
+  const rows = await db
+    .select({ person: people, organizationName: organizations.name })
+    .from(people)
+    .leftJoin(organizations, eq(organizations.id, people.organizationId))
+    .orderBy(asc(people.sortOrder), asc(people.id))
+  return rows.map((r) => ({ ...r.person, organizationName: r.organizationName ?? null }))
+}
+
+/** Lightweight list of organizations for the "assign to organisation" dropdown in People admin. */
+export async function getOrganizationOptions(): Promise<{ id: number; name: string }[]> {
+  await getUserId()
+  return db
+    .select({ id: organizations.id, name: organizations.name })
+    .from(organizations)
+    .orderBy(asc(organizations.name))
 }
 
 export async function getPeopleCounts() {
@@ -297,6 +320,7 @@ function normalize(input: PersonInput) {
     email: input.email || null,
     country: input.country || null,
     bio: input.bio || null,
+    organizationId: input.organizationId ?? null,
     roleTypes: input.roleTypes ?? [],
     tags: input.tags ?? [],
     featured: input.featured ?? false,

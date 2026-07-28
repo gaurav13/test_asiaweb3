@@ -63,9 +63,20 @@ export type DirectoryOrganization = Organization & {
   programs: OrgConnection[]
 }
 
+/** A single person linked to an organization (for the admin org → members list). */
+export type OrgMember = {
+  id: number
+  fullName: string
+  jobTitle: string | null
+  profilePhoto: string | null
+  status: string
+}
+
 export type AdminOrganization = Organization & {
   eventCount: number
   programCount: number
+  memberCount: number
+  members: OrgMember[]
   events: OrgConnection[]
   programs: OrgConnection[]
 }

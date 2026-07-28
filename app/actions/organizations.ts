@@ -8,6 +8,7 @@ import {
   programsOrganizations,
   events,
   programs,
+  people,
 } from "@/lib/db/schema"
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -196,13 +197,46 @@ export async function getMyOrganizations(): Promise<AdminOrganization[]> {
       for (const l of programLinks)
         pushUnique(programsByOrg.get(l.organizationId)!, { id: l.id, title: l.title, slug: l.slug })
     }
+
+    // People linked to each organization (the one-to-many relationship).
+    const membersByOrg = new Map<number, { id: number; fullName: string; jobTitle: string | null; profilePhoto: string | null; status: string }[]>()
+    if (ids.length > 0) {
+      const memberRows = await db
+        .select({
+          id: people.id,
+          fullName: people.fullName,
+          jobTitle: people.jobTitle,
+          profilePhoto: people.profilePhoto,
+          status: people.status,
+          organizationId: people.organizationId,
+        })
+        .from(people)
+        .where(inArray(people.organizationId, ids))
+        .orderBy(asc(people.sortOrder), asc(people.id))
+      for (const m of memberRows) {
+        if (m.organizationId == null) continue
+        const list = membersByOrg.get(m.organizationId) ?? []
+        list.push({
+          id: m.id,
+          fullName: m.fullName,
+          jobTitle: m.jobTitle,
+          profilePhoto: resolveOptionalImage(m.profilePhoto),
+          status: m.status,
+        })
+        membersByOrg.set(m.organizationId, list)
+      }
+    }
+
     return rows.map((r) => {
       const evs = eventsByOrg.get(r.id) ?? []
       const prs = programsByOrg.get(r.id) ?? []
+      const members = membersByOrg.get(r.id) ?? []
       return {
         ...r,
         eventCount: evs.length,
         programCount: prs.length,
+        memberCount: members.length,
+        members,
         events: evs,
         programs: prs,
       }
@@ -378,10 +412,13 @@ export async function setOrganizationHomepage(id: number, showOnHomepage: boolea
 
 export async function deleteOrganization(id: number) {
   await getUserId()
+  // Keep the people, just detach them from the organization (mirrors ON DELETE SET NULL).
+  await db.update(people).set({ organizationId: null, updatedAt: new Date() }).where(eq(people.organizationId, id))
   await db.delete(organizations).where(eq(organizations.id, id))
   await db.delete(eventsOrganizations).where(eq(eventsOrganizations.organizationId, id))
   await db.delete(programsOrganizations).where(eq(programsOrganizations.organizationId, id))
   revalidatePath("/members")
+  revalidatePath("/team")
   revalidatePath("/")
 }
 

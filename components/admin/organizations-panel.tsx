@@ -143,11 +143,15 @@ export function OrganizationsPanel({
     })
   }
 
-  function handleDelete(id: number) {
-    if (!confirm("Delete this organization? This also removes its event/program connections.")) return
+  function handleDelete(o: AdminOrganization) {
+    const memberWarning =
+      o.memberCount > 0
+        ? ` ${o.memberCount} linked ${o.memberCount === 1 ? "person" : "people"} will be kept but unlinked from this organisation.`
+        : ""
+    if (!confirm(`Delete "${o.name}"? This also removes its event/program connections.${memberWarning}`)) return
     startTransition(async () => {
       try {
-        await deleteOrganization(id)
+        await deleteOrganization(o.id)
         router.refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete.")
@@ -332,9 +336,42 @@ export function OrganizationsPanel({
                     {[o.country, o.industry].filter(Boolean).join(" · ") || "—"}
                   </p>
                   <p className="mt-0.5 text-xs text-navy-text/45">
-                    {o.eventCount} event{o.eventCount === 1 ? "" : "s"} · {o.programCount} program
+                    <span className={o.memberCount > 0 ? "font-semibold text-gold" : ""}>
+                      {o.memberCount} member{o.memberCount === 1 ? "" : "s"}
+                    </span>{" "}
+                    · {o.eventCount} event{o.eventCount === 1 ? "" : "s"} · {o.programCount} program
                     {o.programCount === 1 ? "" : "s"}
                   </p>
+                  {o.members.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {o.members.slice(0, 6).map((m) => (
+                        <span
+                          key={`m-${m.id}`}
+                          title={[m.fullName, m.jobTitle].filter(Boolean).join(" · ")}
+                          className="inline-flex items-center gap-1 rounded-full bg-beige px-2 py-0.5 text-[10px] font-medium text-navy-text"
+                        >
+                          <span className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-white">
+                            {m.profilePhoto ? (
+                              <img
+                                src={resolveImageUrl(m.profilePhoto) || "/placeholder.svg"}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : null}
+                          </span>
+                          {m.fullName}
+                          {m.status !== "published" ? (
+                            <span className="text-navy-text/40">({m.status})</span>
+                          ) : null}
+                        </span>
+                      ))}
+                      {o.members.length > 6 ? (
+                        <span className="text-[10px] font-medium text-navy-text/50">
+                          +{o.members.length - 6} more
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {o.events.length > 0 || o.programs.length > 0 ? (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {o.events.map((e) => (
@@ -414,7 +451,7 @@ export function OrganizationsPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(o.id)}
+                    onClick={() => handleDelete(o)}
                     className="rounded-lg p-2 text-awaj-red/70 transition-colors hover:bg-awaj-red/10 hover:text-awaj-red"
                     aria-label="Delete"
                   >

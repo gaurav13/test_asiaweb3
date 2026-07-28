@@ -3,7 +3,7 @@
 import type React from "react"
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Pencil, Trash2, X, Search, Star, ArrowUp, ArrowDown, Download } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Search, Star, ArrowUp, ArrowDown, Download, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,11 +17,12 @@ import {
   deletePerson,
   importPeopleFromSources,
   reorderPerson,
-  type Person,
+  type PersonWithOrg,
   type PersonInput,
 } from "@/app/actions/people"
 
 type Counts = { total: number; published: number; draft: number; homepage: number }
+type OrgOption = { id: number; name: string }
 
 const EMPTY: PersonInput = {
   fullName: "",
@@ -33,6 +34,7 @@ const EMPTY: PersonInput = {
   email: "",
   country: "",
   bio: "",
+  organizationId: null,
   roleTypes: [],
   tags: [],
   featured: false,
@@ -48,15 +50,17 @@ export function PeoplePanel({
   people,
   counts,
   byRole,
+  organizations = [],
 }: {
-  people: Person[]
+  people: PersonWithOrg[]
   counts: Counts
   byRole: Record<string, number>
+  organizations?: OrgOption[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<Person | null>(null)
+  const [editing, setEditing] = useState<PersonWithOrg | null>(null)
   const [form, setForm] = useState<PersonInput>(EMPTY)
   const [tagsText, setTagsText] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +76,7 @@ export function PeoplePanel({
       else if (statusFilter !== "all" && statusFilter !== "homepage" && p.status !== statusFilter) return false
       if (search.trim()) {
         const q = search.toLowerCase()
-        const hay = `${p.fullName} ${p.companyName ?? ""} ${p.jobTitle ?? ""} ${(p.tags ?? []).join(" ")}`.toLowerCase()
+        const hay = `${p.fullName} ${p.companyName ?? ""} ${p.organizationName ?? ""} ${p.jobTitle ?? ""} ${(p.tags ?? []).join(" ")}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -87,7 +91,7 @@ export function PeoplePanel({
     setShowForm(true)
   }
 
-  function openEdit(p: Person) {
+  function openEdit(p: PersonWithOrg) {
     setEditing(p)
     setForm({
       fullName: p.fullName,
@@ -99,6 +103,7 @@ export function PeoplePanel({
       email: p.email ?? "",
       country: p.country ?? "",
       bio: p.bio ?? "",
+      organizationId: p.organizationId ?? null,
       roleTypes: p.roleTypes ?? [],
       tags: p.tags ?? [],
       featured: p.featured,
@@ -328,6 +333,16 @@ export function PeoplePanel({
                   <p className="mt-0.5 truncate text-sm text-navy-text/60">
                     {[p.jobTitle, p.companyName].filter(Boolean).join(" · ") || "—"}
                   </p>
+                  <p className="mt-0.5 truncate text-xs text-navy-text/50">
+                    {p.organizationName ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 font-medium text-gold">
+                        <Building2 className="h-3 w-3" />
+                        {p.organizationName}
+                      </span>
+                    ) : (
+                      <span className="italic text-navy-text/40">No organisation linked</span>
+                    )}
+                  </p>
                   {(p.roleTypes ?? []).length > 0 ? (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {(p.roleTypes ?? []).map((r) => (
@@ -434,6 +449,26 @@ export function PeoplePanel({
                   value={form.companyName ?? ""}
                   onChange={(e) => setForm({ ...form, companyName: e.target.value })}
                 />
+              </Field>
+
+              <Field label="Organisation (linked member)">
+                <select
+                  value={form.organizationId ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, organizationId: e.target.value ? Number(e.target.value) : null })
+                  }
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-navy-text"
+                >
+                  <option value="">— Not linked to an organisation —</option>
+                  {organizations.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-navy-text/50">
+                  Links this person to a member organisation so they appear grouped under it on the public directory.
+                </p>
               </Field>
 
               <div className="flex flex-col gap-2">
