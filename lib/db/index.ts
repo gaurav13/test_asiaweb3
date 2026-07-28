@@ -25,7 +25,9 @@ function normalizeDatabaseUrl(url: string | undefined): string | undefined {
 export function getDatabaseUrl() {
   const raw =
     process.env.DATABASE_URL ??
+    process.env.DATABASE_URL_2 ??
     process.env.POSTGRES_URL ??
+    process.env.POSTGRES_URL_2 ??
     process.env.POSTGRES_PRISMA_URL
 
   return normalizeDatabaseUrl(raw)
