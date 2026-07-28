@@ -254,6 +254,10 @@ export const people = pgTable("people", {
   fullName: text("full_name").notNull(),
   profilePhoto: text("profile_photo"),
   jobTitle: text("job_title"),
+  // One-to-many link to the central Organizations directory. A person belongs to at most one
+  // organization; an organization can have many people. The FK (ON DELETE SET NULL) and the
+  // unique constraints are enforced at the DB level via lib/db/ensure-schema.ts.
+  organizationId: integer("organization_id"),
   companyName: text("company_name"),
   companyLogo: text("company_logo"),
   linkedinUrl: text("linkedin_url"),

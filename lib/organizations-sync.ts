@@ -21,17 +21,20 @@ export function normalizeName(name: string) {
  * Existing organizations are never overwritten — admin edits in the Organizations area
  * are preserved. Returns the organization id.
  */
-export async function findOrCreateOrganizationByName(input: {
-  name: string
-  type?: string
-  tags?: string[]
-  logoUrl?: string | null
-  websiteUrl?: string | null
-  country?: string | null
-  industry?: string | null
-  description?: string | null
-  status?: string
-}): Promise<{ id: number; duplicate: boolean }> {
+export async function findOrCreateOrganizationByName(
+  input: {
+    name: string
+    type?: string
+    tags?: string[]
+    logoUrl?: string | null
+    websiteUrl?: string | null
+    country?: string | null
+    industry?: string | null
+    description?: string | null
+    status?: string
+  },
+  opts?: { authorId?: string },
+): Promise<{ id: number; duplicate: boolean }> {
   const cleanName = input.name.trim()
   if (!cleanName) throw new Error("Organization name is required.")
   const key = normalizeName(cleanName)
@@ -42,7 +45,8 @@ export async function findOrCreateOrganizationByName(input: {
     .limit(1)
   if (existing[0]) return { id: existing[0].id, duplicate: true }
 
-  const userId = await getUserId()
+  // Public submissions have no authenticated user — fall back to a system author id.
+  const userId = opts?.authorId ?? (await getUserId())
   const [row] = await db
     .insert(organizations)
     .values({

@@ -60,30 +60,65 @@ export async function renumberPeopleByPriority() {
 }
 
 /**
- * Find a person by (case-insensitive) name, creating one if none exists.
- * Existing people are never overwritten — admin edits in the People area are preserved.
+ * Find a person (deduplicated by email when provided, otherwise by case-insensitive name) and
+ * create one if none exists. Existing people are never overwritten — admin edits in the People
+ * area are preserved — but empty fields are backfilled and the organization link is (re)applied
+ * so a returning applicant is attached to their current organization.
+ *
+ * `email` is the strongest identity key (enforced unique at the DB level). `organizationId`
+ * establishes the one-to-many People → Organization relationship. Public submissions pass a
+ * system `authorId` because there is no authenticated user.
  */
-export async function findOrCreatePersonByName(input: {
-  fullName: string
-  jobTitle?: string | null
-  companyName?: string | null
-  companyLogo?: string | null
-  profilePhoto?: string | null
-  linkedinUrl?: string | null
-  roleTypes?: string[]
-  roleHints?: (string | null | undefined)[]
-}): Promise<number> {
-  const key = normalizeName(input.fullName)
-  const existing = await db
-    .select({ id: people.id })
-    .from(people)
-    .where(sql`lower(${people.fullName}) = ${key}`)
-    .limit(1)
-  if (existing[0]) return existing[0].id
+export async function findOrCreatePersonByName(
+  input: {
+    fullName: string
+    email?: string | null
+    jobTitle?: string | null
+    companyName?: string | null
+    companyLogo?: string | null
+    profilePhoto?: string | null
+    linkedinUrl?: string | null
+    country?: string | null
+    organizationId?: number | null
+    status?: string
+    roleTypes?: string[]
+    roleHints?: (string | null | undefined)[]
+  },
+  opts?: { authorId?: string },
+): Promise<number> {
+  const email = (input.email ?? "").trim().toLowerCase()
+  const orgId = input.organizationId ?? null
 
-  const userId = await getUserId()
+  // Prefer matching on email (unique identity); fall back to name.
+  const existing = email
+    ? await db.select().from(people).where(sql`lower(${people.email}) = ${email}`).limit(1)
+    : await db.select().from(people).where(sql`lower(${people.fullName}) = ${normalizeName(input.fullName)}`).limit(1)
+
+  if (existing[0]) {
+    const found = existing[0]
+    // Backfill missing details without clobbering admin-edited values, and (re)link to the org.
+    await db
+      .update(people)
+      .set({
+        organizationId: orgId ?? found.organizationId,
+        companyName: found.companyName || input.companyName || null,
+        companyLogo: found.companyLogo || input.companyLogo || null,
+        jobTitle: found.jobTitle || input.jobTitle || null,
+        linkedinUrl: found.linkedinUrl || input.linkedinUrl || null,
+        profilePhoto: found.profilePhoto || input.profilePhoto || null,
+        country: found.country || input.country || null,
+        email: found.email || (email ? input.email!.trim() : null),
+        updatedAt: new Date(),
+      })
+      .where(eq(people.id, found.id))
+    return found.id
+  }
+
+  const userId = opts?.authorId ?? (await getUserId())
+  // An explicit roleTypes array (even empty) is respected; only fall back to keyword detection
+  // when the caller did not specify roles at all.
   const roles =
-    input.roleTypes && input.roleTypes.length > 0
+    input.roleTypes !== undefined
       ? input.roleTypes
       : detectRoles(input.jobTitle, ...(input.roleHints ?? []), input.companyName)
 
@@ -91,18 +126,19 @@ export async function findOrCreatePersonByName(input: {
     .insert(people)
     .values({
       fullName: input.fullName.trim(),
+      organizationId: orgId,
       profilePhoto: input.profilePhoto || null,
       jobTitle: input.jobTitle || null,
       companyName: input.companyName || null,
       companyLogo: input.companyLogo || null,
       linkedinUrl: input.linkedinUrl || null,
-      email: null,
-      country: null,
+      email: input.email?.trim() || null,
+      country: input.country || null,
       bio: null,
       roleTypes: roles,
       tags: [],
       featured: false,
-      status: "published",
+      status: input.status || "published",
       sortOrder: 0,
       showOnHomepage: false,
       showCompanyLogo: Boolean(input.companyLogo),
