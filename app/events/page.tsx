@@ -43,9 +43,17 @@ export default async function EventsPage() {
           <p className="mt-4 max-w-2xl text-pretty leading-relaxed text-white/70">
             Join our Demo Days, VC Connect sessions, and exhibitions across Asia, Japan, and beyond.
           </p>
-          <p className="mt-6 text-sm font-semibold text-gold">
-            {events.length} {events.length === 1 ? "event" : "events"} total
-          </p>
+          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-gold">
+            <span>
+              {upcoming.length} {upcoming.length === 1 ? "upcoming event" : "upcoming events"}
+            </span>
+            <span className="text-white/40" aria-hidden="true">
+              /
+            </span>
+            <span>
+              {past.length} {past.length === 1 ? "past event" : "past events"}
+            </span>
+          </div>
         </div>
       </section>
 
